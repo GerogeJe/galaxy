@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>星际拓荒 - 你的宇宙入口</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Segoe UI', sans-serif; }
+        
+        /* 面板通用样式 */
+        .panel {
+            position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+            width: 320px; background: rgba(20, 20, 30, 0.85); backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px;
+            padding: 30px; color: white; box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+            z-index: 10; transition: opacity 0.3s;
+        }
+        .panel.hidden { display: none; }
+        .panel h1 { font-size: 20px; margin-top: 0; margin-bottom: 25px; font-weight: 300; letter-spacing: 1px; text-align: center; }
+        
+        .input-group { margin-bottom: 15px; }
+        .input-group label { display: block; font-size: 12px; color: #aaa; margin-bottom: 5px; }
+        .input-group input {
+            width: 100%; padding: 12px; background: rgba(0,0,0,0.4);
+            border: 1px solid rgba(255,255,255,0.2); border-radius: 8px;
+            color: white; outline: none; box-sizing: border-box; font-size: 14px;
+        }
+        .input-group input:focus { border-color: #88aaff; }
+
+        /* 星球选择区域 */
+        .planet-grid {
+            display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+            margin-top: 10px; max-height: 140px; overflow-y: auto; padding-right: 5px;
+        }
+        .planet-grid::-webkit-scrollbar { width: 4px; }
+        .planet-grid::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
+        .planet-option {
+            width: 100%; aspect-ratio: 1; border-radius: 50%;
+            background-size: cover; background-position: center;
+            cursor: pointer; border: 2px solid transparent;
+            transition: all 0.2s; opacity: 0.5;
+        }
+        .planet-option:hover { opacity: 0.8; }
+        .planet-option.active { border-color: #88aaff; opacity: 1; box-shadow: 0 0 8px #88aaff; }
+
+        /* 按钮和链接 */
+        .btn {
+            width: 100%; padding: 12px; margin-top: 15px;
+            background: linear-gradient(135deg, #4b6cb7 0%, #182848 100%);
+            border: none; border-radius: 8px; color: white; font-size: 15px;
+            cursor: pointer; transition: transform 0.1s;
+        }
+        .btn:active { transform: scale(0.98); }
+        .btn-outline {
+            background: transparent; border: 1px solid rgba(255,255,255,0.3);
+            margin-top: 10px;
+        }
+        .btn-outline:hover { background: rgba(255,255,255,0.1); }
+        
+        .switch-link { text-align: center; margin-top: 15px; font-size: 13px; color: #888; }
+        .switch-link a { color: #88aaff; cursor: pointer; text-decoration: none; }
+        .switch-link a:hover { text-decoration: underline; }
+
+        #status-msg { font-size: 12px; margin-top: 15px; text-align: center; min-height: 16px; }
+    </style>
+</head>
+<body>
+
+    <!-- ===== 1. 入口面板 (主菜单) ===== -->
+    <div id="entry-panel" class="panel">
+        <h1>进入你的宇宙</h1>
+        <button class="btn" onclick="showPanel('create')">创建我的星球</button>
+        <button class="btn btn-outline" onclick="showPanel('login')">登录我的星球</button>
+    </div>
+
+    <!-- ===== 2. 创建面板 ===== -->
+    <div id="create-panel" class="panel hidden">
+        <h1>创建你的星球</h1>
+        <div class="input-group">
+            <label>账号</label>
+            <input type="text" id="reg-username" placeholder="为你的星球起一个独特的名字吧">
+        </div>
+        <div class="input-group">
+            <label>密码</label>
+            <input type="password" id="reg-password" placeholder="设置你的密码">
+        </div>
+        <div class="input-group">
+            <label>选择一颗心仪的星球</label>
+            <div class="planet-grid" id="planet-grid"></div>
+        </div>
+        <button class="btn" id="create-btn">开始探索</button>
+        <div class="switch-link"><a onclick="showPanel('entry')">返回主菜单</a></div>
+        <div id="reg-status" class="status-msg"></div>
+    </div>
+
+    <!-- ===== 3. 登录面板 ===== -->
+    <div id="login-panel" class="panel hidden">
+        <h1>登录你的星球</h1>
+        <div class="input-group">
+            <label>账号</label>
+            <input type="text" id="login-username" placeholder="输入你的星球的名字吧">
+        </div>
+        <div class="input-group">
+            <label>密码</label>
+            <input type="password" id="login-password" placeholder="输入密码">
+        </div>
+        <button class="btn" id="login-btn">启程</button>
+        <div class="switch-link"><a onclick="showPanel('entry')">返回主菜单</a></div>
+        <div id="login-status" class="status-msg"></div>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://esm.sh/three@0.185.0",
+            "three/addons/": "https://esm.sh/three@0.185.0/examples/jsm/"
+        }
+    }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // ===== 星球数据 =====
+        const planetData = [
+            { id: 'mars', name: '火星', path: 'mars.jpg' },
+            { id: 'earth', name: '地球', path: 'earth_daymap.jpg' },
+            { id: 'jupiter', name: '木星', path: 'jupiter.jpg' },
+            { id: 'saturn', name: '土星', path: 'saturn.jpg' },
+            { id: 'moon', name: '月球', path: 'moon.jpg' },
+            { id: 'neptune', name: '海王星', path: 'neptune.jpg' },
+            { id: 'uranus', name: '天王星', path: 'uranus.jpg' },
+            { id: 'mercury', name: '水星', path: 'mercury.jpg' },
+            { id: 'venus', name: '金星', path: 'venus_surface.jpg' },
+            { id: 'eris', name: '阋神星', path: 'eris.jpg' }
+        ];
+        let selectedPlanetPath = planetData[0].path;
+
+        // ===== UI 面板切换逻辑 =====
+        window.showPanel = function(panelName) {
+            document.querySelectorAll('.panel').forEach(p => p.classList.add('hidden'));
+            document.getElementById(panelName + '-panel').classList.remove('hidden');
+            // 清空错误提示
+            document.querySelectorAll('.status-msg').forEach(el => el.textContent = '');
+        };
+
+        // ===== 模拟数据库 (localStorage) =====
+        function getUsers() {
+            return JSON.parse(localStorage.getItem('planets_users')) || {};
+        }
+        function saveUsers(users) {
+            localStorage.setItem('planets_users', JSON.stringify(users));
+        }
+
+        // ===== 处理登录 =====
+        document.getElementById('login-btn').addEventListener('click', () => {
+            const username = document.getElementById('login-username').value.trim();
+            const password = document.getElementById('login-password').value.trim();
+            const status = document.getElementById('login-status');
+
+            if (!username || !password) { status.textContent = '请输入账号和密码'; return; }
+
+            const users = getUsers();
+            if (!users[username] || users[username].password !== password) {
+                status.textContent = '账号不存在或密码错误'; return;
+            }
+
+            // 登录成功
+            localStorage.setItem('currentUser', username);
+            status.style.color = '#6bff6b';
+            status.textContent = '登录成功，正在进入星球...';
+            setTimeout(() => { window.location.href = '2.html'; }, 800);
+        });
+
+        // ===== 处理创建 =====
+        document.getElementById('create-btn').addEventListener('click', () => {
+            const username = document.getElementById('reg-username').value.trim();
+            const password = document.getElementById('reg-password').value.trim();
+            const status = document.getElementById('reg-status');
+
+            if (!username || !password) { status.textContent = '请填写完整的账号和密码'; return; }
+
+            const users = getUsers();
+            if (users[username]) { status.textContent = '该账号已被注册，请换一个名字'; return; }
+
+            // 保存新用户
+            users[username] = { password: password, planetPath: selectedPlanetPath };
+            saveUsers(users);
+            localStorage.setItem('currentUser', username);
+
+            status.style.color = '#6bff6b';
+            status.textContent = '创建成功，正在进入星球...';
+            setTimeout(() => { window.location.href = '2.html'; }, 800);
+        });
+
+        // ===== Three.js 场景初始化 (星球预览背景) =====
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 0, 6);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.body.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.enablePan = false;
+        controls.minDistance = 3;
+        controls.maxDistance = 10;
+
+        // 星球
+        const geometry = new THREE.SphereGeometry(1.5, 64, 64);
+        const textureLoader = new THREE.TextureLoader();
+        const material = new THREE.MeshStandardMaterial({ map: textureLoader.load(selectedPlanetPath) });
+        const planet = new THREE.Mesh(geometry, material);
+        scene.add(planet);
+
+        // 灯光
+        scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+        dirLight.position.set(5, 3, 5);
+        scene.add(dirLight);
+
+        // 星空背景
+        const starsGeometry = new THREE.BufferGeometry();
+        const starsCount = 3000;
+        const starsPositions = new Float32Array(starsCount * 3);
+        for (let i = 0; i < starsCount * 3; i += 3) {
+            starsPositions[i] = (Math.random() - 0.5) * 200;
+            starsPositions[i + 1] = (Math.random() - 0.5) * 200;
+            starsPositions[i + 2] = (Math.random() - 0.5) * 200;
+        }
+        starsGeometry.setAttribute('position', new THREE.BufferAttribute(starsPositions, 3));
+        scene.add(new THREE.Points(starsGeometry, new THREE.PointsMaterial({ color: 0xffffff, size: 0.2 })));
+
+        // 生成创建面板里的星球选项
+        const grid = document.getElementById('planet-grid');
+        planetData.forEach((data) => {
+            const div = document.createElement('div');
+            div.className = 'planet-option';
+            div.style.backgroundImage = `url('${data.path}')`;
+            div.title = data.name;
+            if (data.path === selectedPlanetPath) div.classList.add('active');
+
+            div.addEventListener('click', () => {
+                document.querySelectorAll('.planet-option').forEach(el => el.classList.remove('active'));
+                div.classList.add('active');
+                selectedPlanetPath = data.path;
+                material.map = textureLoader.load(selectedPlanetPath);
+                material.needsUpdate = true;
+            });
+            grid.appendChild(div);
+        });
+
+        // 渲染循环
+        function animate() {
+            requestAnimationFrame(animate);
+            planet.rotation.y += 0.002;
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>

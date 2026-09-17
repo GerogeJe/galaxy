@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>galaxy</title>
+    <style>
+        body { margin: 0; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://esm.sh/three@0.185.0",
+            "three/addons/": "https://esm.sh/three@0.185.0/examples/jsm/"
+        }
+    }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js'; // 新增这行
+
+        // 1. 创建场景
+        const scene = new THREE.Scene();
+
+        // 2. 创建透视相机 (视角, 宽高比, 近裁剪面, 远裁剪面)
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 2, 5); // 将相机放在 z 轴正方向 5 单位处
+        camera.lookAt(0, 0, 0);
+
+        // 3. 创建渲染器
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true; // 让拖动有惯性，手感更丝滑
+        controls.dampingFactor = 0.05; // 惯性系数
+
+        // 4. 添加一个球体（你的星球）
+        const geometry = new THREE.SphereGeometry(1, 32, 32); // 半径1, 分段数32x32
+        const textureLoader = new THREE.TextureLoader();
+        const planetTexture = textureLoader.load('./mars.jpg'); // 注意这里的路径和文件名要和你保存的一致
+        const material = new THREE.MeshStandardMaterial({ map: planetTexture });
+        const planet = new THREE.Mesh(geometry, material);
+        scene.add(planet);
+
+        // 5. 添加光源（否则球体是黑的）
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5); // 环境光
+        scene.add(ambientLight);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+        directionalLight.position.set(5, 5, 5);
+        scene.add(directionalLight);
+
+        // 6. 渲染循环（让场景动起来）
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // 让星球缓慢自转
+            planet.rotation.y += 0.005;
+
+            controls.update(); // 新增：更新控制器状态（配合 enableDamping 使用）
+
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // 7. 窗口大小自适应
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>

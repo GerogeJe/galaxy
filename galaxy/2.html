@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>站在你的星球上</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Segoe UI', sans-serif; }
+        
+        /* 互动提示 */
+        #interaction-hint {
+            position: absolute; bottom: 15%; width: 100%; text-align: center;
+            color: #fff; font-size: 18px; text-shadow: 0 0 10px rgba(46, 204, 113, 0.8);
+            pointer-events: none; opacity: 0; transition: opacity 0.3s;
+        }
+        #interaction-hint.show { opacity: 1; }
+
+        /* 邮箱 UI 面板 */
+        #mailbox-panel {
+            position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+            width: 420px; background: rgba(20, 20, 30, 0.95); backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 16px;
+            padding: 25px; color: white; box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+            z-index: 20; display: none;
+        }
+        #mailbox-panel.open { display: block; }
+        
+        #mailbox-panel h2 { margin-top: 0; margin-bottom: 15px; font-weight: 300; text-align: center; letter-spacing: 2px; color: #2ecc71; }
+
+        /* 标签页 */
+        .tabs { display: flex; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+        .tab-btn {
+            flex: 1; padding: 10px; background: none; border: none; color: #888;
+            font-size: 15px; cursor: pointer; transition: all 0.3s; border-bottom: 2px solid transparent;
+            position: relative;
+        }
+        .tab-btn.active { color: #fff; border-bottom-color: #2ecc71; }
+        .tab-btn:hover { color: #ccc; }
+
+        /* 未读消息小绿点 */
+        .unread-dot {
+            display: none; position: absolute; top: 8px; right: 25px;
+            width: 8px; height: 8px; background: #2ecc71; border-radius: 50%;
+            box-shadow: 0 0 5px #2ecc71;
+        }
+        .tab-btn.has-unread .unread-dot { display: block; }
+
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* 表单元素 */
+        .mail-input-group { margin-bottom: 15px; }
+        .mail-input-group label { display: block; font-size: 12px; color: #aaa; margin-bottom: 5px; }
+        .mail-input-group input, .mail-input-group textarea, .mail-input-group select {
+            width: 100%; padding: 10px; background: rgba(0,0,0,0.4);
+            border: 1px solid rgba(255,255,255,0.2); border-radius: 8px;
+            color: white; outline: none; box-sizing: border-box; font-size: 14px; font-family: inherit;
+        }
+        .mail-input-group textarea { height: 100px; resize: vertical; }
+        .mail-input-group select option { background: #1a1a2e; }
+
+        .mail-btn {
+            width: 100%; padding: 12px; margin-top: 10px;
+            background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
+            border: none; border-radius: 8px; color: white; font-size: 15px; cursor: pointer;
+        }
+        .mail-btn:active { transform: scale(0.98); }
+        .mail-btn.close { background: transparent; border: 1px solid rgba(255,255,255,0.3); margin-top: 8px; }
+
+        #mail-status { font-size: 12px; text-align: center; margin-top: 10px; min-height: 16px; color: #ff6b6b; }
+
+        /* 收件箱列表 */
+        #inbox-list { max-height: 300px; overflow-y: auto; padding-right: 5px; }
+        #inbox-list::-webkit-scrollbar { width: 4px; }
+        #inbox-list::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
+        
+        .mail-card {
+            background: rgba(255,255,255,0.05); border-radius: 8px; padding: 12px;
+            margin-bottom: 10px; border-left: 3px solid #2ecc71;
+        }
+        .mail-card .from { font-size: 12px; color: #2ecc71; margin-bottom: 5px; font-weight: bold; }
+        .mail-card .time { font-size: 10px; color: #666; float: right; }
+        .mail-card .content { font-size: 14px; line-height: 1.5; color: #ddd; word-break: break-word; }
+        .empty-inbox { text-align: center; color: #666; padding: 30px 0; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <div id="interaction-hint">按 <span style="color:#2ecc71; font-weight:bold;">E</span> 打开邮箱</div>
+
+    <!-- 邮箱界面 -->
+    <div id="mailbox-panel">
+        <h2>星际邮箱</h2>
+        
+        <!-- 标签页切换 -->
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="send">寄信</button>
+            <button class="tab-btn" data-tab="inbox">收件箱 <span class="unread-dot"></span></button>
+        </div>
+
+        <!-- 寄信面板 -->
+        <div id="tab-send" class="tab-content active">
+            <div class="mail-input-group">
+                <label>收件人星球 (用户名)</label>
+                <input type="text" id="mail-to" placeholder="输入对方的名字">
+            </div>
+            <div class="mail-input-group">
+                <label>历史记录</label>
+                <select id="mail-history">
+                    <option value="">-- 选择最近的联系人 --</option>
+                </select>
+            </div>
+            <div class="mail-input-group">
+                <label>信件内容</label>
+                <textarea id="mail-content" placeholder="写下你想说的话..."></textarea>
+            </div>
+            <button class="mail-btn" id="send-mail-btn">发送信件</button>
+            <div id="mail-status"></div>
+        </div>
+
+        <!-- 收件箱面板 -->
+        <div id="tab-inbox" class="tab-content">
+            <div id="inbox-list">
+                <!-- 动态生成信件卡片 -->
+            </div>
+        </div>
+
+        <button class="mail-btn close" id="close-mail-btn">关闭</button>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://esm.sh/three@0.185.0",
+            "three/addons/": "https://esm.sh/three@0.185.0/examples/jsm/"
+        }
+    }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
+
+        // ===== 1. 基础环境 =====
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x000000);
+
+        const planetRadius = 1.0;
+        const playerHeight = 0.2;
+        
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 1000);
+        camera.position.set(0, planetRadius + playerHeight, 0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.body.appendChild(renderer.domElement);
+
+        // ===== 2. 自定义第一人称控制器 (修复上下视角问题) =====
+        let isLocked = false;
+        let mouseX = 0;
+        let mouseY = 0;
+
+        document.body.addEventListener('click', () => {
+            if (!document.getElementById('mailbox-panel').classList.contains('open')) {
+                document.body.requestPointerLock();
+            }
+        });
+
+        document.addEventListener('pointerlockchange', () => {
+            isLocked = document.pointerLockElement === document.body;
+            document.getElementById('interaction-hint').style.opacity = isLocked ? '0' : '0.8';
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isLocked) return;
+            mouseX += e.movementX * 0.002;
+            mouseY += e.movementY * 0.002;
+        });
+
+        // ===== 3. 读取用户数据和星球 =====
+        const currentUser = localStorage.getItem('currentUser');
+        const users = JSON.parse(localStorage.getItem('planets_users')) || {};
+        let planetPath = 'mars.jpg';
+
+        if (currentUser && users[currentUser]) {
+            planetPath = users[currentUser].planetPath;
+        }
+
+        const textureLoader = new THREE.TextureLoader();
+        const planetTexture = textureLoader.load('./' + planetPath);
+        const planet = new THREE.Mesh(
+            new THREE.SphereGeometry(planetRadius, 64, 64),
+            new THREE.MeshStandardMaterial({ map: planetTexture })
+        );
+        scene.add(planet);
+
+        // ===== 4. 创建新的实体邮箱 =====
+        const mailboxGroup = new THREE.Group();
+        const greenMat = new THREE.MeshStandardMaterial({ color: 0x27ae60 });
+        const grayMat = new THREE.MeshStandardMaterial({ color: 0x7f8c8d });
+        const redMat = new THREE.MeshStandardMaterial({ color: 0xe74c3c });
+
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.03, 0.2, 8), grayMat);
+        post.position.y = 0.1;
+        mailboxGroup.add(post);
+
+        const boxBody = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.15), greenMat);
+        boxBody.position.y = 0.3; 
+        mailboxGroup.add(boxBody);
+
+        const roof = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.2, 16, 1, false, 0, Math.PI), greenMat);
+        roof.rotation.z = Math.PI / 2;
+        roof.position.y = 0.4; 
+        roof.scale.set(1, 1, 0.75); 
+        mailboxGroup.add(roof);
+
+        const slot = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.015, 0.01), new THREE.MeshBasicMaterial({color: 0x000000}));
+        slot.position.set(0, 0.35, 0.075); 
+        mailboxGroup.add(slot);
+
+        const flagPole = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.005, 0.08, 4), grayMat);
+        flagPole.position.set(0.105, 0.35, 0);
+        mailboxGroup.add(flagPole);
+
+        const flag = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.04, 0.03), redMat);
+        flag.position.set(0.105, 0.39, 0.015);
+        mailboxGroup.add(flag);
+
+        const mailboxPosition = new THREE.Vector3(0.5, 0.6, 0.8).normalize().multiplyScalar(planetRadius);
+        mailboxGroup.position.copy(mailboxPosition);
+        
+        const upVector = new THREE.Vector3(0, 1, 0);
+        mailboxGroup.quaternion.setFromUnitVectors(upVector, mailboxPosition.clone().normalize());
+        
+        scene.add(mailboxGroup);
+
+        // ===== 5. 灯光 =====
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
+        directionalLight.position.set(5, 5, 5);
+        scene.add(directionalLight);
+
+        // ===== 6. 键盘输入 =====
+        const keys = { w: false, a: false, s: false, d: false, space: false };
+        document.addEventListener('keydown', (e) => {
+            switch(e.code) {
+                case 'KeyW': keys.w = true; break;
+                case 'KeyA': keys.a = true; break;
+                case 'KeyS': keys.s = true; break;
+                case 'KeyD': keys.d = true; break;
+                case 'Space': keys.space = true; break;
+                case 'KeyE': 
+                    if (isNearMailbox && !document.getElementById('mailbox-panel').classList.contains('open')) {
+                        openMailbox();
+                    }
+                    break;
+            }
+        });
+        document.addEventListener('keyup', (e) => {
+            switch(e.code) {
+                case 'KeyW': keys.w = false; break;
+                case 'KeyA': keys.a = false; break;
+                case 'KeyS': keys.s = false; break;
+                case 'KeyD': keys.d = false; break;
+                case 'Space': keys.space = false; break;
+            }
+        });
+
+        // ===== 7. 物理与移动 =====
+        const moveSpeed = 0.02;
+        let velocityY = 0;
+        const gravity = 0.002;
+        const jumpPower = 0.05;
+        let isNearMailbox = false;
+
+        // ===== 8. 邮箱 UI 与 逻辑 =====
+        const mailboxPanel = document.getElementById('mailbox-panel');
+        const mailToInput = document.getElementById('mail-to');
+        const mailHistorySelect = document.getElementById('mail-history');
+        const mailContentInput = document.getElementById('mail-content');
+        const mailStatus = document.getElementById('mail-status');
+
+        function checkUnread() {
+            const mails = JSON.parse(localStorage.getItem('planets_mails')) || [];
+            const hasUnread = mails.some(m => m.to === currentUser && !m.read);
+            document.querySelector('[data-tab="inbox"]').classList.toggle('has-unread', hasUnread);
+        }
+
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                btn.classList.add('active');
+                document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+                
+                if (btn.dataset.tab === 'inbox') {
+                    renderInbox();
+                    const mails = JSON.parse(localStorage.getItem('planets_mails')) || [];
+                    mails.forEach(m => { if (m.to === currentUser) m.read = true; });
+                    localStorage.setItem('planets_mails', JSON.stringify(mails));
+                    checkUnread();
+                }
+            });
+        });
+
+        function openMailbox() {
+            document.exitPointerLock();
+            mailboxPanel.classList.add('open');
+            document.getElementById('interaction-hint').classList.remove('show');
+            loadMailHistory();
+            renderInbox();
+            checkUnread();
+        }
+
+        document.getElementById('close-mail-btn').addEventListener('click', () => {
+            mailboxPanel.classList.remove('open');
+            mailStatus.textContent = '';
+            mailToInput.value = '';
+            mailContentInput.value = '';
+            document.body.requestPointerLock();
+        });
+
+        function loadMailHistory() {
+            mailHistorySelect.innerHTML = '<option value="">-- 选择最近的联系人 --</option>';
+            const mails = JSON.parse(localStorage.getItem('planets_mails')) || [];
+            const sentTo = [...new Set(mails.filter(m => m.from === currentUser).map(m => m.to))];
+            
+            sentTo.forEach(name => {
+                const option = document.createElement('option');
+                option.value = name;
+                option.textContent = name;
+                mailHistorySelect.appendChild(option);
+            });
+        }
+
+        mailHistorySelect.addEventListener('change', (e) => {
+            if (e.target.value) mailToInput.value = e.target.value;
+        });
+
+        document.getElementById('send-mail-btn').addEventListener('click', () => {
+            const to = mailToInput.value.trim();
+            const content = mailContentInput.value.trim();
+
+            if (!to || !content) { mailStatus.textContent = '收件人和内容不能为空！'; return; }
+            if (to === currentUser) { mailStatus.textContent = '你不能给自己发信哦！'; return; }
+            if (!users[to]) { mailStatus.textContent = `找不到名为 "${to}" 的星球！`; return; }
+
+            const mails = JSON.parse(localStorage.getItem('planets_mails')) || [];
+            mails.push({
+                id: Date.now(),
+                from: currentUser,
+                to: to,
+                content: content,
+                timestamp: new Date().toLocaleString(),
+                read: false
+            });
+            localStorage.setItem('planets_mails', JSON.stringify(mails));
+
+            mailStatus.style.color = '#2ecc71';
+            mailStatus.textContent = `信件已成功送往 ${to} 的星球！`;
+            
+            mailToInput.value = '';
+            mailContentInput.value = '';
+            loadMailHistory();
+        });
+
+        function renderInbox() {
+            const inboxList = document.getElementById('inbox-list');
+            inboxList.innerHTML = ''; 
+
+            const mails = JSON.parse(localStorage.getItem('planets_mails')) || [];
+            const myMails = mails.filter(m => m.to === currentUser).reverse();
+
+            if (myMails.length === 0) {
+                inboxList.innerHTML = '<div class="empty-inbox">你的收件箱空空如也<br>去结交新朋友吧！</div>';
+                return;
+            }
+
+            myMails.forEach(mail => {
+                const card = document.createElement('div');
+                card.className = 'mail-card';
+                card.innerHTML = `
+                    <div class="from">来自: ${mail.from} <span class="time">${mail.timestamp}</span></div>
+                    <div class="content">${mail.content}</div>
+                `;
+                inboxList.appendChild(card);
+            });
+        }
+
+        // ===== 9. 动画循环 =====
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const distToMailbox = camera.position.distanceTo(mailboxGroup.position);
+            const hint = document.getElementById('interaction-hint');
+            
+            if (distToMailbox < 0.6) {
+                if (!isNearMailbox) {
+                    isNearMailbox = true;
+                    if (!mailboxPanel.classList.contains('open')) hint.classList.add('show');
+                }
+            } else {
+                if (isNearMailbox) {
+                    isNearMailbox = false;
+                    hint.classList.remove('show');
+                }
+            }
+
+            if (isLocked) {
+                // 1. 获取当前脚下的“向上”方向（即星球表面的法线）
+                const up = camera.position.clone().normalize(); 
+                camera.up.copy(up); 
+
+                // 2. 获取相机当前的视线方向
+                const forward = new THREE.Vector3();
+                camera.getWorldDirection(forward);
+
+                // 3. 应用鼠标旋转
+                if (mouseX !== 0 || mouseY !== 0) {
+                    // 【修复】水平旋转（偏航）：围绕“上”轴旋转视线方向
+                    forward.applyAxisAngle(up, -mouseX);
+
+                    // 计算当前视线在水平面上的投影，用来确定正确的“右”轴
+                    const horizForward = forward.clone().projectOnPlane(up).normalize();
+                    // 防止视线垂直时，投影为零向量
+                    if (horizForward.lengthSq() < 0.001) {
+                        horizForward.copy(camera.up).cross(new THREE.Vector3(0, 0, 1)).normalize(); 
+                    }
+                    const right = new THREE.Vector3().crossVectors(horizForward, up).normalize();
+
+                    // 【修复】垂直旋转（俯仰）：围绕“右”轴旋转视线方向
+                    // 我们限制俯仰角度，防止视线越过天顶/天底导致翻转
+                    const prevForward = forward.clone();
+                    forward.applyAxisAngle(right, -mouseY);
+
+                    // 检查俯仰是否越界
+                    const angleToUp = forward.angleTo(up);
+                    const limit = 0.1; // 距离极点的最小角度
+                    if (angleToUp < limit || angleToUp > Math.PI - limit) {
+                        forward.copy(prevForward); // 越界，撤销本次俯仰旋转
+                    }
+
+                    mouseX = 0;
+                    mouseY = 0;
+                }
+
+                // 4. 应用视线方向
+                camera.lookAt(camera.position.clone().add(forward));
+
+                // 5. 移动逻辑（必须使用投影到切平面的方向，否则会往天上飞）
+                const moveForward = forward.clone().projectOnPlane(up).normalize();
+                const moveRight = new THREE.Vector3().crossVectors(moveForward, up).normalize();
+
+                if (keys.w) camera.position.add(moveForward.clone().multiplyScalar(moveSpeed));
+                if (keys.s) camera.position.add(moveForward.clone().multiplyScalar(-moveSpeed));
+                if (keys.d) camera.position.add(moveRight.clone().multiplyScalar(moveSpeed));
+                if (keys.a) camera.position.add(moveRight.clone().multiplyScalar(-moveSpeed));
+
+                // 6. 处理跳跃与重力
+                const jumpOffset = up.clone().multiplyScalar(velocityY);
+                camera.position.add(jumpOffset);
+                velocityY -= gravity;
+                
+                const distance = camera.position.length();
+                if (distance <= planetRadius + playerHeight) {
+                    camera.position.normalize().multiplyScalar(planetRadius + playerHeight);
+                    velocityY = 0;
+                }
+
+                if (keys.space && velocityY === 0) {
+                    velocityY = jumpPower;
+                }
+            }
+
+            renderer.render(scene, camera);
+        }
+        animate();
+        
+        checkUnread();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
